@@ -1,0 +1,11 @@
+{
+  "pack": {
+    "description": [
+      "",
+      {"text": "WizardCraft", "color": "#8450C0", "bold": true},
+      {"text": "\nA Harry Potter MMORPG", "color": "gray"}
+    ],
+    "min_format": [88, 0],
+    "max_format": 88
+  }
+}

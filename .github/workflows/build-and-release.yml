@@ -1,0 +1,51 @@
+name: Build & Release Resource Pack
+
+# main        -> pack for hogwarts-N
+# testserver-N -> pack for the test server with that name (and nothing else changes)
+on:
+  push:
+    branches:
+      - main
+      - 'testserver-*'
+    paths:
+      - 'pack/**'
+      - 'tools/**'
+      - '.github/workflows/build-and-release.yml'
+  workflow_dispatch:   # build a branch by hand: Actions -> this workflow -> Run workflow -> pick the branch
+
+permissions:
+  contents: write      # creating the release and uploading the files
+
+concurrency:
+  group: pack-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: pack-${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and check the pack
+        run: python3 tools/build_pack.py --repository "$GITHUB_REPOSITORY" --tag "$TAG" --version "build ${{ github.run_number }} (${GITHUB_SHA::7})"
+
+      # One release per branch that is updated by every push. The zip has the SHA-1 in its name, so a client never
+      # gets an old file under a new hash; the servers only read manifest.json.
+      - name: Publish
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
+            --title "$TAG" --notes "Resource pack of the branch $GITHUB_REF_NAME, updated by every push." \
+            --prerelease --target "$GITHUB_SHA"
+          gh release upload "$TAG" build/WizardCraft-Pack-*.zip --clobber
+          gh release upload "$TAG" build/manifest.json --clobber
+
+      - name: Remove old packs (the newest 3 stay)
+        run: |
+          gh release view "$TAG" --json assets \
+            --jq '.assets | map(select(.name | test("^WizardCraft-Pack-.*\\.zip$"))) | sort_by(.createdAt) | reverse | .[3:] | .[].name' |
+          while read -r name; do
+            gh release delete-asset "$TAG" "$name" --yes
+          done
